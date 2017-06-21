@@ -224,8 +224,7 @@ pub(crate) fn spawn_helper(
     let mut err = None;
     USR1_INIT.call_once(|| unsafe {
         let mut new: libc::sigaction = mem::zeroed();
-        new.sa_sigaction = sigusr1_handler as usize;
-        new.sa_flags = libc::SA_SIGINFO as _;
+        new.sa_handler = sigusr1_handler as usize;
         if libc::sigaction(libc::SIGUSR1, &new, ptr::null_mut()) != 0 {
             err = Some(io::Error::last_os_error());
         }
@@ -283,7 +282,11 @@ impl Helper {
                 // return an error, but on other platforms it may not. In
                 // that sense we don't actually know if this will succeed or
                 // not!
-                libc::pthread_kill(self.thread.as_pthread_t() as _, libc::SIGUSR1);
+                extern "C" {
+                    // Missing from libc on redox
+                    fn pthread_kill(thread: libc::pthread_t, sig: libc::c_int) -> libc::c_int;
+                }
+                pthread_kill(self.thread.as_pthread_t() as _, libc::SIGUSR1);
             }
             state = self
                 .state
@@ -332,8 +335,6 @@ fn cvt(t: c_int) -> io::Result<c_int> {
 
 extern "C" fn sigusr1_handler(
     _signum: c_int,
-    _info: *mut libc::siginfo_t,
-    _ptr: *mut libc::c_void,
 ) {
     // nothing to do
 }
