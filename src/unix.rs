@@ -224,7 +224,15 @@ pub(crate) fn spawn_helper(
     let mut err = None;
     USR1_INIT.call_once(|| unsafe {
         let mut new: libc::sigaction = mem::zeroed();
-        new.sa_handler = sigusr1_handler as usize;
+        #[cfg(target_os = "redox")]
+        {
+            new.sa_handler = sigusr1_handler as usize;
+        }
+        #[cfg(not(target_os = "redox"))]
+        {
+            new.sa_sigaction = sigusr1_handler as usize;
+            new.sa_flags = libc::SA_SIGINFO as _;
+        }
         if libc::sigaction(libc::SIGUSR1, &new, ptr::null_mut()) != 0 {
             err = Some(io::Error::last_os_error());
         }
@@ -333,8 +341,18 @@ fn cvt(t: c_int) -> io::Result<c_int> {
     }
 }
 
+#[cfg(target_os = "redox")]
 extern "C" fn sigusr1_handler(
     _signum: c_int,
+) {
+    // nothing to do
+}
+
+#[cfg(not(target_os = "redox"))]
+extern "C" fn sigusr1_handler(
+    _signum: c_int,
+    _info: *mut libc::siginfo_t,
+    _ptr: *mut libc::c_void,
 ) {
     // nothing to do
 }
